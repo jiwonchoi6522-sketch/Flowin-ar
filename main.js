@@ -22,6 +22,7 @@ let anchors=[], models=[null,null,null], seen=new Set(), timer=null, scanStarted
 let viewer=null, rewardRoot=null, rewardIndex=-1, toastTimer;
 const byteLoaded=[0,0,0];
 let loadingDone=false, previousCorrectSlot=-1;
+let previewStream=null, previewVideo=null;
 function toast(text) { $('toast').textContent=text; $('toast').hidden=false; clearTimeout(toastTimer); toastTimer=setTimeout(()=>$('toast').hidden=true,3500); }
 function saveCount() { try { sessionStorage.setItem(KEY,JSON.stringify({count})); } catch { toast('이 브라우저에서는 진행 상태를 저장할 수 없어요. 새로고침하지 말고 계속해 주세요.'); } }
 function paintCollection(n=count) {
@@ -33,9 +34,9 @@ function stopScanTimer() { clearInterval(timer); timer=null; }
 function armScanTimer() {
   stopScanTimer(); scanStarted=performance.now();
   timer=setInterval(()=>{
-    if (mode!=='ar' || phase!=='scanning' || document.hidden) return;
+    if (!['ar','camera'].includes(mode) || phase!=='scanning' || document.hidden) return;
     const sec=(performance.now()-scanStarted)/1000;
-    if(sec>=10) setStatus('조명이 밝은 곳에서 보드 전체가 화면에 들어오게 비춰 주세요');
+    if(sec>=10) setStatus(mode==='camera'?'카메라는 연결됐어요. 보드 인식 준비 전에는 아래 버튼으로 퀴즈를 풀어 주세요.':'조명이 밝은 곳에서 보드 전체가 화면에 들어오게 비춰 주세요');
     if(sec>=20) $('flat-button').hidden=false;
   },500);
 }
@@ -52,7 +53,8 @@ function progress() {
 async function fetchModel(q,i) {
   const controller=new AbortController(), timeout=setTimeout(()=>controller.abort(),30000);
   try {
-    const response=await fetch(`./assets/models/${q.id}.glb`,{signal:controller.signal});
+    let response=await fetch(`./assets/models/${q.id}.glb`,{signal:controller.signal});
+    if(response.status===404)response=await fetch(`./${q.id}.glb`,{signal:controller.signal});
     if(!response.ok) throw new Error(`model HTTP ${response.status}`);
     let buffer;
     if(response.body?.getReader) {
@@ -96,7 +98,12 @@ function safeStop(ar) {
 function discardAR(ar) {
   safeStop(ar);try{ar.renderer.dispose();ar.cssRenderer?.domElement?.remove();ar.renderer.domElement.remove();ar.video?.remove();}catch{}
 }
-function finishCamera() {attempt++;arReady=false;stopScanTimer();seen.clear();safeStop(mind);document.body.classList.remove('ar');}
+function finishCamera() {
+  attempt++;arReady=false;stopScanTimer();seen.clear();safeStop(mind);
+  previewStream?.getTracks().forEach(track=>track.stop());previewStream=null;
+  previewVideo?.remove();previewVideo=null;manualQuiz.hidden=true;
+  document.body.classList.remove('ar');
+}
 function found(index) {
   if(mode!=='ar')return;
   seen.add(index);
@@ -111,54 +118,98 @@ function lost(index) {
   // If tracking drops during the celebration, show the object in the 3D viewer.
   if(mode==='ar' && phase==='reward' && index===rewardIndex && $('viewer').hidden) showViewerReward().catch(()=>setStatus('오브제를 모았어요. 잠시 후 박스로 이동해요.'));
 }
+// A camera preview does not depend on targets.mind, WebGL or a CDN.
+const manualQuiz=document.createElement('button');
+manualQuiz.id='camera-quiz-button';manualQuiz.className='secondary';manualQuiz.hidden=true;
+manualQuiz.addEventListener('click',()=>{if(mode==='camera' && phase==='scanning')showQuiz();});
+document.querySelector('.experience-bottom').prepend(manualQuiz);
+function cameraQuizStep(message='카메라는 연결됐어요. 아래 버튼으로 퀴즈를 풀어 주세요.') {
+  mode='camera';phase='scanning';currentQuiz=-1;arReady=false;
+  $('mode-tag').textContent='카메라 · 보드 인식 준비 중';
+  instruction();$('scan-frame').hidden=false;$('flat-button').hidden=false;
+  manualQuiz.textContent=`0${count+1} 보드 퀴즈 풀기`;manualQuiz.hidden=false;
+  setStatus(message);
+  armScanTimer();
+}
 async function startAR() {
   const ticket=++attempt;mode='ar';phase='scanning';arReady=false;currentQuiz=-1;
-  $('start').hidden=true;$('experience').hidden=false;$('mode-tag').textContent='AR · 카메라';
-  $('quiz').hidden=true;$('flat-button').hidden=true;instruction();setStatus('카메라를 준비하고 있어요…');armScanTimer();
-  let instance, targetURL;
+  $('start').hidden=true;$('experience').hidden=false;$('mode-tag').textContent='카메라 연결 중';
+  document.body.classList.remove('flat');
+  $('quiz').hidden=true;$('flat-button').hidden=true;manualQuiz.hidden=true;
+  instruction();setStatus('카메라 사용을 허용해 주세요.');armScanTimer();
   try {
     if(!window.isSecureContext || !navigator.mediaDevices?.getUserMedia)throw new Error('HTTPS / camera API required');
-    await engine();
+    // Request permission before any target-file check or library download.
+    const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}});
+    if(ticket!==attempt){stream.getTracks().forEach(track=>track.stop());return;}
+    previewStream=stream;
+    const video=document.createElement('video');previewVideo=video;
+    video.autoplay=true;video.muted=true;video.playsInline=true;
+    video.setAttribute('playsinline','');video.setAttribute('muted','');
+    video.style.cssText='position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:-1';
+    $('ar-stage').append(video);video.srcObject=stream;await video.play();
+    if(ticket!==attempt){stream.getTracks().forEach(track=>track.stop());video.remove();return;}
+    if(!video.videoWidth)await new Promise((resolve,reject)=>{
+      const timeout=setTimeout(()=>{video.removeEventListener('loadedmetadata',ready);reject(new Error('Camera metadata timeout'));},12000);
+      function ready(){clearTimeout(timeout);resolve();}
+      video.addEventListener('loadedmetadata',ready,{once:true});
+    });
     if(ticket!==attempt)return;
-    const {MindARThree}=await import('mindar-image-three');
+    video.setAttribute('width',video.videoWidth);video.setAttribute('height',video.videoHeight);
+    document.body.classList.add('ar');setStatus('카메라 연결 완료 · 보드 인식을 준비하고 있어요.');
+  } catch(error) {
+    console.warn('Camera unavailable',error);
     if(ticket!==attempt)return;
-    // Preflight catches missing targets before MindAR's async executor starts.
-    const targetController=new AbortController();
-    const targetTimeout=setTimeout(()=>targetController.abort(),20000);
-    let targetResponse, targetData;
+    await useFlat('카메라 권한을 허용하지 않았거나 연결할 수 없어 카메라 없는 모드로 시작해요.');return;
+  }
+  // A missing or invalid target no longer closes a working camera.
+  let instance, targetURL, cancelled=false;
+  try {
+    const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),10000);
+    let data;
     try {
-      targetResponse=await fetch('./assets/targets.mind',{signal:targetController.signal});
-      if(!targetResponse.ok || targetResponse.headers.get('content-type')?.includes('text/html'))throw new Error('targets.mind missing');
-      targetData=await targetResponse.arrayBuffer();
-      if(targetData.byteLength<100)throw new Error('targets.mind empty');
-    } finally {clearTimeout(targetTimeout);}
+      const response=await fetch('./assets/targets.mind',{signal:controller.signal});
+      if(!response.ok || response.headers.get('content-type')?.includes('text/html'))throw new Error('targets.mind missing');
+      data=await response.arrayBuffer();if(data.byteLength<100)throw new Error('targets.mind empty');
+    }finally{clearTimeout(timeout);}
     if(ticket!==attempt)return;
-    targetURL=URL.createObjectURL(new Blob([targetData]));
+    await engine();if(ticket!==attempt)return;
+    const {MindARThree}=await import('mindar-image-three');if(ticket!==attempt)return;
+    targetURL=URL.createObjectURL(new Blob([data]));
     instance=new MindARThree({container:$('ar-stage'),imageTargetSrc:targetURL,maxTrack:3,uiLoading:'no',uiScanning:'no',uiError:'no'});
     mind=instance;lightScene(instance.scene);
-    // If the visitor switches modes while a permission prompt is pending,
-    // release the eventual stream before tracking can start.
-    const startVideo=instance._startVideo.bind(instance);
-    instance._startVideo=async()=>{await startVideo();if(ticket!==attempt){instance.video?.srcObject?.getTracks().forEach(track=>track.stop());throw new Error('Camera start cancelled');}};
+    // MindAR 1.2.5 adapter: reuse the already authorized rear-camera stream.
+    // Do not request a second stream on iOS.
+    instance._startVideo=async()=>{
+      if(ticket!==attempt)throw new Error('Camera start cancelled');
+      instance.video=previewVideo;
+      if(!instance.video || !previewStream?.active)throw new Error('Camera stream ended');
+    };
     anchors=QUIZZES.map((q,index)=>{const anchor=instance.addAnchor(index);anchor.onTargetFound=()=>found(index);anchor.onTargetLost=()=>lost(index);return anchor;});
-    // MindAR loads targets and requests rear-camera permission. Do not require models first.
-    await instance.start();
+    const starting=instance.start();
+    starting.then(()=>{if(cancelled || ticket!==attempt){try{instance.controller?.stopProcessVideo();}catch{};}},()=>{});
+    let initTimeout;
+    try{await Promise.race([starting,new Promise((_,reject)=>{initTimeout=setTimeout(()=>reject(new Error('AR initialization timeout')),20000);})]);}
+    finally{clearTimeout(initTimeout);}
     if(ticket!==attempt){discardAR(instance);return;}
-    arReady=true;document.body.classList.add('ar');
+    arReady=true;$('mode-tag').textContent='AR · 카메라';
     instance.renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
     instance.renderer.setAnimationLoop(()=>{
-      if(rewardRoot && rewardRoot.parent!==viewer?.scene) rewardRoot.rotation.y+=0.018;
+      if(rewardRoot && rewardRoot.parent!==viewer?.scene)rewardRoot.rotation.y+=.018;
       instance.renderer.render(instance.scene,instance.camera);
     });
     setStatus('보드의 그림과 글자가 또렷하게 보이도록 비춰 주세요');armScanTimer();
     if(seen.has(count))showQuiz();
-  }catch(error){
-    console.warn('AR unavailable',error);
-    if(ticket!==attempt){discardAR(instance);return;}
-    discardAR(instance);mind=null;
-    await useFlat('카메라 또는 이미지 인식을 사용할 수 없어 카메라 없는 모드로 시작해요.');
+  } catch(error) {
+    cancelled=true;console.warn('Tracking unavailable; retaining camera preview',error);
+    if(ticket!==attempt)return;
+    // Release tracking resources, but keep the preview video and its stream alive.
+    try{instance?.controller?.stopProcessVideo();instance?.renderer.setAnimationLoop(null);instance?.renderer.dispose();instance?.renderer.domElement.remove();instance?.cssRenderer?.domElement.remove();}catch{}
+    mind=null;
+    cameraQuizStep('카메라 연결 완료 · 보드 인식은 준비 중이에요. 아래 버튼으로 퀴즈를 풀어 주세요.');
   } finally {if(targetURL)URL.revokeObjectURL(targetURL);}
 }
+
 async function useFlat(message='카메라 없이도 세 가지 오브제를 모두 모을 수 있어요.') {
   if(phase==='reward')return;
   finishCamera();mode='flat';phase='scanning';currentQuiz=-1;
@@ -168,7 +219,7 @@ async function useFlat(message='카메라 없이도 세 가지 오브제를 모�
 }
 function showQuiz() {
   if(count>=3 || phase==='reward' || phase==='complete')return;
-  stopScanTimer();phase='quiz';currentQuiz=count;const q=QUIZZES[count];
+  manualQuiz.hidden=true;stopScanTimer();phase='quiz';currentQuiz=count;const q=QUIZZES[count];
   $('scan-frame').hidden=true;$('quiz').hidden=false;$('quiz-number').textContent=`QUIZ 0${count+1}`;
   $('question').textContent=q.question;$('feedback').textContent='';$('answers').replaceChildren();
   const choices=shuffled(q.choices);
@@ -219,10 +270,19 @@ async function answer(choice,button) {
   document.body.classList.remove('revealing');$('reward-text').hidden=true;rewardIndex=-1;
   if(count===3){complete();return;}
   phase='scanning';currentQuiz=-1;instruction();$('scan-frame').hidden=false;
-  if(mode==='flat')showQuiz();else{setStatus(`이제 0${count+1} 보드를 비춰 주세요`);armScanTimer();if(seen.has(count))showQuiz();}
+  if(mode==='flat')showQuiz();else if(mode==='camera')cameraQuizStep();else{setStatus(`이제 0${count+1} 보드를 비춰 주세요`);armScanTimer();if(seen.has(count))showQuiz();}
+}
+// Support both the intended assets/ folders and earlier flat GitHub uploads.
+function attachThumbFallback(img,id) {
+  const fallback=()=>{
+    if(img.flowinRootFallback)return;
+    img.flowinRootFallback=true;img.src=`./${id}.png`;
+  };
+  img.addEventListener('error',fallback);
+  if(img.complete && img.naturalWidth===0)fallback();
 }
 async function thumbPreview(q) {
-  const img=document.createElement('img');img.src=`./assets/thumbs/${q.id}.png`;img.alt=q.name;img.className='flying-thumb';img.style.cssText='left:calc(50% - 60px);top:calc(38dvh - 60px);width:120px;height:120px';document.body.append(img);await sleep(1400);img.remove();
+  const img=document.createElement('img');img.src=`./assets/thumbs/${q.id}.png`;img.alt=q.name;attachThumbFallback(img,q.id);img.className='flying-thumb';img.style.cssText='left:calc(50% - 60px);top:calc(38dvh - 60px);width:120px;height:120px';document.body.append(img);await sleep(1400);img.remove();
 }
 async function showViewerReward() {
   if(!rewardRoot || !$('viewer').hidden)return;
@@ -240,7 +300,7 @@ async function showViewerReward() {
 function resizeViewer(){if(!viewer || $('viewer').hidden)return;const w=$('viewer').clientWidth,h=$('viewer').clientHeight;viewer.renderer.setSize(w,h);viewer.camera.aspect=w/h;viewer.camera.updateProjectionMatrix();}
 function clearReward(){rewardRoot?.removeFromParent();rewardRoot=null;if(viewer)viewer.renderer.setAnimationLoop(null);$('viewer').hidden=true;}
 async function flyToSlot(i,origin) {
-  const dest=$(`slot-${i}`).getBoundingClientRect(), img=document.createElement('img');img.className='flying-thumb';img.alt='';img.src=`./assets/thumbs/${QUIZZES[i].id}.png`;
+  const dest=$(`slot-${i}`).getBoundingClientRect(), img=document.createElement('img');img.className='flying-thumb';img.alt='';img.src=`./assets/thumbs/${QUIZZES[i].id}.png`;attachThumbFallback(img,QUIZZES[i].id);
   img.style.left=`${origin.x-45}px`;img.style.top=`${origin.y-45}px`;document.body.append(img);
   if(img.animate){const animation=img.animate([{transform:'translate(0,0) scale(1)',opacity:1},{transform:`translate(${dest.left+dest.width/2-origin.x}px,${dest.top+dest.height/2-origin.y}px) scale(.65)`,opacity:.8}],{duration:reduced?1:650,easing:'cubic-bezier(.22,.75,.3,1)',fill:'forwards'});await animation.finished.catch(()=>{});}
   img.remove();
@@ -260,8 +320,9 @@ $('share-text').textContent=SHARE_TEXT;$('copy-share').addEventListener('click',
 window.addEventListener('resize',resizeViewer);
 window.addEventListener('pagehide',()=>{finishCamera();clearReward();});
 window.addEventListener('pageshow',event=>{if(event.persisted && phase!=='complete')location.reload();});
-document.addEventListener('visibilitychange',()=>{if(!document.hidden && mode==='ar' && phase==='scanning')scanStarted=performance.now();});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden && ['ar','camera'].includes(mode) && phase==='scanning')scanStarted=performance.now();});
 $('inapp').hidden=!/KAKAOTALK|FBAN|FBAV|Instagram|Line\/|NAVER|DaumApps|MicroMessenger/i.test(navigator.userAgent);
+QUIZZES.forEach((q,i)=>attachThumbFallback($(`slot-${i}`).querySelector('img'),q.id));
 paintCollection();if(count===3)complete();
 // HTML and CSS render independently of external libraries and model requests.
 preloadModels();
