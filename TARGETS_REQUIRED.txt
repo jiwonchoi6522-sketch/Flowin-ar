@@ -1,0 +1,5 @@
+이 파일은 targets.mind가 아닙니다.
+전시 보드 이미지 3개를 MindAR Compiler에서 하나로 컴파일하세요.
+타깃0=보드01, 타깃1=보드02, 타깃2=보드03.
+다운로드한 파일을 assets/targets.mind에 추가하세요.
+상세 방법: ../README.md
