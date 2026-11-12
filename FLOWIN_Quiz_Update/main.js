@@ -7,9 +7,11 @@ const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const TEXT = {
   ko: {
     title: '《눈, 눈, 눈》 퀴즈', eyebrow: '이자람 판소리 · 전시 연계 체험',
-    intro: '퀴즈 세 문제를 풀고 눈송이, 부채, 소리북을 모아 보세요.',
-    start: '시작하기', resume: '이어서 풀기', instruction: '정답을 골라 주세요',
-    wrong: '다시 골라 보세요!', completeLabel: '수집 완료', complete: '모든 오브제를 모았어요!',
+    intro: '전시 보드를 읽고 퀴즈 3개를 풀면 오브제 3개를 모을 수 있어요 · 약 5분',
+    introStaff: '팀원이 현장에서 체험을 안내해 드려요.',
+    description: '퀴즈를 풀고 세 가지 오브제를 모아 보세요. 팀 FLOW:IN', language: '언어 선택',
+    start: '시작하기', resume: '이어서 풀기', instruction: '이야기를 읽고 풀어 주세요', quizHelp: '전시 보드를 읽고 정답을 골라 주세요.',
+    wrong: '앗, 보드를 한 번 더 볼까요? 다시 골라 보세요', completeLabel: '수집 완료', complete: '모든 오브제를 모았어요!',
     completeLead: '눈 속에서 만난 이야기, 이제 공연으로 이어 보세요.',
     staff: '이 화면을 팀원에게 보여 주세요', booking: '공연 예매하기 ↗',
     copy: '공유 문구 복사', copied: '복사했어요.', prompt: '아래 문구를 복사해 주세요.',
@@ -26,10 +28,12 @@ const TEXT = {
   },
   en: {
     title: 'Snow, Snow, Snow Quiz', eyebrow: 'Lee Jaram’s Pansori · Exhibition Quiz',
-    intro: 'Answer three questions to collect a snowflake, a fan, and a drum.',
-    start: 'Start quiz', resume: 'Continue quiz', instruction: 'Choose the correct answer',
-    wrong: 'Try another answer!', completeLabel: 'Collection complete', complete: 'You collected all three objects!',
-    completeLead: 'Discover the rest of the story at the performance.',
+    intro: 'Read the exhibition boards and answer three quiz questions to collect three objects · About 5 minutes',
+    introStaff: 'A team member will guide you through the experience on site.',
+    description: 'Answer the quiz questions and collect three objects. Team FLOW:IN', language: 'Language selection',
+    start: 'Start quiz', resume: 'Continue quiz', instruction: 'Read the story and answer the question', quizHelp: 'Read the exhibition board and choose the correct answer.',
+    wrong: 'Oops, take another look at the board and try again.', completeLabel: 'Collection complete', complete: 'You collected all three objects!',
+    completeLead: 'Carry the story you discovered in the snow into the performance.',
     staff: 'Show this screen to a team member.', booking: 'Book tickets ↗',
     copy: 'Copy share message', copied: 'Copied!', prompt: 'Copy the message below.',
     share: 'I collected all three objects in the Snow, Snow, Snow quiz!',
@@ -48,18 +52,18 @@ const TEXT = {
 const QUIZZES = [
   {
     id: 'snowflake', bytes: 1883336,
-    ko: { name: '눈송이', question: '두 사람은 무엇 속에서 길을 잃었을까요?', choices: ['눈보라', '바닷속', '사막'], success: '정답이에요! 눈송이를 모았어요.' },
-    en: { name: 'Snowflake', question: 'Where did the two travelers get lost?', choices: ['In a snowstorm', 'Under the sea', 'In a desert'], success: 'Correct! You collected a snowflake.' }
+    ko: { name: '눈송이', question: '두 사람은 무엇 속에서 길을 잃었을까요?', choices: ['눈보라', '바닷속', '사막'], success: '맞아요! 눈보라를 모았어요. 눈송이를 얻었어요' },
+    en: { name: 'Snowflake', question: 'What did the two people get lost in?', choices: ['In a snowstorm', 'Under the sea', 'In a desert'], success: 'That’s right! You collected a snowstorm. You earned a snowflake.' }
   },
   {
     id: 'fan', bytes: 1432104,
-    ko: { name: '부채', question: '이자람은 어떤 공연을 하는 사람일까요?', choices: ['판소리', '발레', '마술'], success: '정답이에요! 소리꾼의 부채를 모았어요.' },
-    en: { name: 'Fan', question: 'What kind of performance does Lee Jaram give?', choices: ['Pansori (Korean musical storytelling)', 'Ballet', 'Magic'], success: 'Correct! You collected the singer’s fan.' }
+    ko: { name: '부채', question: '이자람은 어떤 공연을 하는 사람일까요?', choices: ['판소리', '발레', '마술'], success: '맞아요! 소리꾼의 대표 소품, 부채를 얻었어요' },
+    en: { name: 'Fan', question: 'What kind of performance does Lee Jaram give?', choices: ['Pansori', 'Ballet', 'Magic'], success: 'That’s right! You earned the fan, a signature prop of the pansori singer.' }
   },
   {
     id: 'buk', bytes: 1190820,
-    ko: { name: '소리북', question: '고수는 무엇으로 장단을 맞출까요?', choices: ['북', '피아노', '바이올린'], success: '정답이에요! 소리북을 모았어요.' },
-    en: { name: 'Pansori drum', question: 'Which instrument keeps the rhythm in pansori?', choices: ['Drum', 'Piano', 'Violin'], success: 'Correct! You collected the pansori drum.' }
+    ko: { name: '소리북', question: '고수는 무엇으로 장단을 맞출까요?', choices: ['북', '피아노', '바이올린'], success: '맞아요! 이야기의 장단을 만드는 소리북을 얻었어요' },
+    en: { name: 'Pansori drum', question: 'What does the pansori drummer use to keep the rhythm?', choices: ['Drum', 'Piano', 'Violin'], success: 'That’s right! You earned the pansori drum that sets the rhythm of the story.' }
   }
 ];
 
@@ -76,7 +80,7 @@ function readCount() {
 
 let lang = readLanguage();
 let count = readCount();
-let phase = count === QUIZZES.length ? 'complete' : 'idle';
+let phase = 'language';
 let rewardIndex = -1, wrong = false, answerOrder = [], previousCorrectSlot = -1;
 let THREE, GLTFLoader, enginePromise, loadPromise, viewer, rewardRoot, toastTimer;
 let loadingDone = false;
@@ -108,6 +112,11 @@ function paintCollection() {
 function paint() {
   document.documentElement.lang = lang;
   document.title = `${t('title')} · FLOW:IN`;
+  document.querySelector('meta[name=description]').content = t('description');
+  $('language-choice').hidden = phase !== 'language';
+  $('language-switch').hidden = phase === 'language';
+  $('language-switch').setAttribute('aria-label', t('language'));
+  $('collection-area').hidden = phase === 'language';
   document.querySelectorAll('[data-text]').forEach(el => { el.textContent = t(el.dataset.text); });
   document.querySelectorAll('[data-lang]').forEach(button => {
     button.setAttribute('aria-pressed', String(button.dataset.lang === lang));
@@ -118,7 +127,7 @@ function paint() {
   $('collection').setAttribute('aria-label', t('collection'));
   $('start-button').textContent = t(count ? 'resume' : 'start');
   $('start').hidden = phase !== 'idle';
-  $('experience').hidden = phase === 'idle' || phase === 'complete';
+  $('experience').hidden = phase !== 'quiz' && phase !== 'reward';
   $('complete').hidden = phase !== 'complete';
   $('quiz').hidden = phase !== 'quiz';
   $('reward-text').hidden = phase !== 'reward';
@@ -126,6 +135,7 @@ function paint() {
   if (phase === 'quiz' || phase === 'reward') {
     const index = phase === 'reward' ? rewardIndex : count;
     const q = QUIZZES[index][lang];
+    $('instruction').textContent = `0${index + 1} ${t('instruction')}`;
     $('step-count').textContent = `${t('object')} ${index + 1} / ${QUIZZES.length}`;
     $('quiz-number').textContent = `${t('quiz')} ${index + 1}`;
     $('question').textContent = q.question;
@@ -282,12 +292,21 @@ async function flyToSlot(i,origin) {
   img.remove();
 }
 
-document.querySelectorAll('[data-lang]').forEach(button => {
+function selectLanguage(value) {
+  lang = value;
+  try { localStorage.setItem(LANGUAGE_KEY, lang); } catch {}
+  paint();
+}
+document.querySelectorAll('[data-choose-language]').forEach(button => {
   button.addEventListener('click', () => {
-    lang = button.dataset.lang;
-    try { localStorage.setItem(LANGUAGE_KEY, lang); } catch {}
-    paint();
+    phase = count === QUIZZES.length ? 'complete' : 'idle';
+    selectLanguage(button.dataset.chooseLanguage);
+    $(phase === 'complete' ? 'complete-title' : 'title').focus({preventScroll: true});
+    preloadModels();
   });
+});
+document.querySelectorAll('[data-lang]').forEach(button => {
+  button.addEventListener('click', () => selectLanguage(button.dataset.lang));
 });
 $('start-button').addEventListener('click', nextQuestion);
 $('retry-models').addEventListener('click', preloadModels);
@@ -303,4 +322,3 @@ $('copy-share').addEventListener('click', async () => {
 window.addEventListener('resize', resizeViewer);
 window.addEventListener('pagehide', clearReward);
 paint();
-preloadModels();
